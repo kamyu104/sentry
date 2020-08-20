@@ -35,7 +35,7 @@ from .base import (
     MAX_BATCH_SIZE,
 )
 from .models import ExportedData, ExportedDataBlob
-from .utils import convert_to_utf8, handle_snuba_errors
+from .utils import ensure_unicode_for_csv, handle_snuba_errors
 from .processors.discover import DiscoverProcessor
 from .processors.issues_by_tag import IssuesByTagProcessor
 
@@ -102,7 +102,14 @@ def assemble_download(
 
             processor = get_processor(data_export, environment_id)
 
-            with tempfile.TemporaryFile() as tf:
+            # XXX(python3): In python2 land we write bytes encoded as utf-8 via
+            # the csv writer (see ensure_unicode_for_csv). In python3 land we
+            # write unicode strings (which is all the csv module is able to do,
+            # it will NOT write bytes like in py2). Because of this we must
+            # open our file in different modes between python2 and 3.
+            file_args = {"mode": "w+", "encoding": "utf-8"} if six.PY3 else {"mode": "w+b"}
+
+            with tempfile.NamedTemporaryFile(**file_args) as tf:
                 writer = csv.DictWriter(tf, processor.header_fields, extrasaction="ignore")
                 if first_page:
                     writer.writeheader()
@@ -136,8 +143,13 @@ def assemble_download(
                         break
 
                 tf.seek(0)
-                new_bytes_written = store_export_chunk_as_blob(data_export, bytes_written, tf)
-                bytes_written += new_bytes_written
+                # XXX: Reopen the temp file in binary mode to be compatible
+                # with the file storage APIs
+                with open(tf.name, "rb") as tf_binary:
+                    new_bytes_written = store_export_chunk_as_blob(
+                        data_export, bytes_written, tf_binary
+                    )
+                    bytes_written += new_bytes_written
         except ExportError as error:
             return data_export.email_failure(message=six.text_type(error))
         except Exception as error:
@@ -218,18 +230,14 @@ def process_rows(processor, data_export, batch_size, offset):
 @handle_snuba_errors(logger)
 def process_issues_by_tag(processor, limit, offset):
     gtv_list_unicode = processor.get_serialized_data(limit=limit, offset=offset)
-    # TODO(python3): Remove next line once the 'csv' module has been updated to Python 3
-    # See associated comment in './utils.py'
-    gtv_list = convert_to_utf8(gtv_list_unicode)
+    gtv_list = ensure_unicode_for_csv(gtv_list_unicode)
     return gtv_list
 
 
 @handle_snuba_errors(logger)
 def process_discover(processor, limit, offset):
     raw_data_unicode = processor.data_fn(limit=limit, offset=offset)["data"]
-    # TODO(python3): Remove next line once the 'csv' module has been updated to Python 3
-    # See associated comment in './utils.py'
-    raw_data = convert_to_utf8(raw_data_unicode)
+    raw_data = ensure_unicode_for_csv(raw_data_unicode)
     raw_data = processor.handle_fields(raw_data)
     return raw_data
 
