@@ -1084,7 +1084,7 @@ def update_alert_rule_trigger_action(
     :param target_type: Which type of target to send to
     :param target_identifier: The identifier of the target
     :param target_display: Human readable name for the target
-    :param integration: The Integration related to this action.
+    :param integration: (Optional) The Integration related to this action.
     :return:
     """
     updated_fields = {}
