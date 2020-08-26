@@ -1083,7 +1083,6 @@ def update_alert_rule_trigger_action(
     :param type: Which sort of action to take
     :param target_type: Which type of target to send to
     :param target_identifier: The identifier of the target
-    :param target_display: Human readable name for the target
     :param integration: (Optional) The Integration related to this action.
     :return:
     """
@@ -1094,6 +1093,8 @@ def update_alert_rule_trigger_action(
         updated_fields["target_type"] = target_type.value
     if integration is not None:
         updated_fields["integration"] = integration
+    if sentry_app is not None:
+        updated_fields["sentry_app"] = sentry_app
     if target_identifier is not None:
         type = updated_fields.get("type", trigger_action.type)
 
