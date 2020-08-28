@@ -14,6 +14,7 @@ from sentry.incidents.models import (
     IncidentTrigger,
     INCIDENT_STATUS,
 )
+from sentry.incidents.tasks import handle_trigger_action
 from sentry.utils.email import MessageBuilder
 from sentry.utils.http import absolute_uri
 
@@ -153,16 +154,24 @@ class PagerDutyActionHandler(ActionHandler):
     AlertRuleTriggerAction.Type.SENTRY_APP,
     [AlertRuleTriggerAction.TargetType.SENTRY_APP],
 )
-class IntegrationActionHandler(ActionHandler):
+class SentryAppActionHandler(ActionHandler):
     def fire(self, metric_value):
-        self.send_alert(metric_value)
+        self.send_alert("fire", metric_value)
 
     def resolve(self, metric_value):
-        self.send_alert(metric_value)
+        self.send_alert("resolve", metric_value)
 
-    def send_alert(self, metric_value):
-        # TODO: finish
-        pass
+    def send_alert(self, method, metric_value):
+        handle_trigger_action.apply_async(
+            kwargs={
+                "action_id": self.action.id,
+                "incident_id": self.incident.id,
+                "project_id": self.project.id,
+                "method": method,
+                "metric_value": metric_value,
+            },
+            countdown=5,
+        )
 
 
 def format_duration(minutes):
