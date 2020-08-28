@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import logging
-import sys
 import threading
 from six.moves.queue import Full, PriorityQueue
 from concurrent.futures import Future
@@ -23,8 +22,8 @@ def execute(function, daemon=True):
 
         try:
             result = function()
-        except Exception:
-            future.set_exception_info(*sys.exc_info()[1:])
+        except Exception as e:
+            future.set_exception(e)
         else:
             future.set_result(result)
 
@@ -92,14 +91,14 @@ class TimedFuture(Future):
             self.__timing[1] = time()
             return super(TimedFuture, self).set_result(*args, **kwargs)
 
-    def set_exception_info(self, *args, **kwargs):
+    def set_exception(self, *args, **kwargs):
         # XXX: This makes the potentially unsafe assumption that
         # ``set_exception`` will always continue to call this function.
         with self._condition:
             # This method always overwrites the result, so we always overwrite
             # the timing, even if another timing was already recorded.
             self.__timing[1] = time()
-            return super(TimedFuture, self).set_exception_info(*args, **kwargs)
+            return super(TimedFuture, self).set_exception(*args, **kwargs)
 
 
 class Executor(object):
@@ -146,8 +145,8 @@ class SynchronousExecutor(Executor):
         assert future.set_running_or_notify_cancel()
         try:
             result = callable()
-        except Exception:
-            future.set_exception_info(*sys.exc_info()[1:])
+        except Exception as e:
+            future.set_exception(e)
         else:
             future.set_result(result)
         return future
@@ -179,8 +178,8 @@ class ThreadedExecutor(Executor):
                 continue
             try:
                 result = function()
-            except Exception:
-                future.set_exception_info(*sys.exc_info()[1:])
+            except Exception as e:
+                future.set_exception(e)
             else:
                 future.set_result(result)
             queue.task_done()
